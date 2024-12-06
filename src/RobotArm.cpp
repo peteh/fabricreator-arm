@@ -11,7 +11,6 @@ RobotArm::RobotArm(uint8_t servo0Pin, uint8_t servo1Pin, uint8_t servo2Pin, uint
 
     for (uint8_t i = 0; i < NUM_JOINTS; i++)
     {
-        ESP32PWM::allocateTimer(i);
         m_servoPos[i] = 90;
         m_servos[i] = Servo();
         m_servos[i].attach(m_servoPins[i]);
