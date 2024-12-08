@@ -18,8 +18,7 @@ const uint8_t SERVO_1_PIN = 1;
 const uint8_t SERVO_2_PIN = 1;
 const uint8_t SERVO_3_PIN = 1;
 const uint8_t SERVO_4_PIN = 1;
-const uint8_t SERVO_5_PIN = 1;
-const uint8_t SERVO_6_PIN = 1; // claw
+const uint8_t SERVO_5_PIN = 1; // claw
 
 const uint WIFI_DISCONNECT_FORCED_RESTART_S = 60;
 
@@ -65,13 +64,13 @@ bool connectToMqtt()
 
 void setup()
 {
-  // allow allocation of all timers
+  // We allocate two timers for PWM Control
   // TODO: check if and why this is needed from the lib
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  ESP32PWM::allocateTimer(3);
-  g_robotArm = new RobotArm(SERVO_0_PIN, SERVO_1_PIN, SERVO_2_PIN, SERVO_3_PIN, SERVO_4_PIN, SERVO_5_PIN, SERVO_6_PIN);
+  //ESP32PWM::allocateTimer(2);
+  //ESP32PWM::allocateTimer(3);
+  g_robotArm = new RobotArm(SERVO_0_PIN, SERVO_1_PIN, SERVO_2_PIN, SERVO_3_PIN, SERVO_4_PIN, SERVO_5_PIN);
 }
 
 void loop()

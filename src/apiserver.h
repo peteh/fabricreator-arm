@@ -1,11 +1,12 @@
 #pragma once
 
 #include <WebServer.h>
-
+#include "RobotArm.h"
 class ApiServer
 {
 private:
     WebServer m_server;
+    RobotArm* m_robotArm;
 
     /**
      * @brief Get the web Content Type that corresponds to a file type.
@@ -21,7 +22,8 @@ public:
      *
      * @param settings The settings of the device
      */
-    ApiServer()
+    ApiServer(RobotArm* robotArm)
+    : m_robotArm(robotArm)
     {
     }
 

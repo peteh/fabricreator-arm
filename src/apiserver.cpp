@@ -51,12 +51,25 @@ void ApiServer::handleWeb()
 
 void ApiServer::handleJointsPost()
 {
-    // Handle form submission and update configuration data
+    /* curl -X POST https://api.example.com/endpoint \
+    -H "Content-Type: application/json" \
+     -d '{"joints": [90, 90, 90, 90, 90, 90, 90, 90]}'
+    */
     if (m_server.method() == HTTP_POST)
     {
         JsonDocument doc;
         String jsonString = m_server.arg("plain");
         deserializeJson(doc, jsonString);
+
+        // Access the "joints" array
+        JsonArray joints = doc["joints"];
+        
+        Serial.println("Joints data:"); 
+        for (size_t i = 0; i < joints.size(); i++) 
+        {
+            uint8_t value = joints[i]; 
+            m_robotArm->setAngle(i, value);
+        }
 
         // Send a response to the client
         String responseMessage = "Configuration updated successfully!";
@@ -77,15 +90,15 @@ void ApiServer::handleDeviceReboot()
 
 void ApiServer::handleJointsGet()
 {
-    // Respond with the current configuration in JSON format
+    // Respond with the current joint configuration in JSON format
     String configJson;
     JsonDocument doc;
-    // TODO set joints
-    // Set the values in the document
-    doc["joint"] = 1l;
 
-    // doc["version"] = SYSTEM_NAME " " VERSION " (" __DATE__ ")";
-
+    JsonArray joints = doc["joints"].to<JsonArray>();
+    for(uint8_t i = 0; i < m_robotArm->NUM_JOINTS; i++)
+    {
+        joints.add(m_robotArm->getAngle(i));
+    }
     serializeJson(doc, configJson);
     m_server.send(200, "application/json", configJson);
 }
