@@ -8,22 +8,25 @@
 #include <PubSubClient.h>
 // watch dog
 #include <esp_task_wdt.h>
+#include "platform.h"
 #include "RobotArm.h"
 #include "apiserver.h"
 #include "config.h"
+#include "mqttview.h"
 #include "utils.h"
 
-const uint8_t SERVO_0_PIN = 1; // base
-const uint8_t SERVO_1_PIN = 1;
-const uint8_t SERVO_2_PIN = 1;
-const uint8_t SERVO_3_PIN = 1;
-const uint8_t SERVO_4_PIN = 1;
-const uint8_t SERVO_5_PIN = 1; // claw
+const uint8_t SERVO_0_PIN = 2;  // base
+const uint8_t SERVO_1_PIN = 3;  // lower arm low gear
+const uint8_t SERVO_2_PIN = 4;  // lower arm upper gear
+const uint8_t SERVO_3_PIN = 5;  // claw turn
+const uint8_t SERVO_4_PIN = 16; // claw pitch
+const uint8_t SERVO_5_PIN = 17; // claw
 
 const uint WIFI_DISCONNECT_FORCED_RESTART_S = 60;
 
 RobotArm *g_robotArm;
-ApiServer *server;
+MqttView *g_mqttView;
+ApiServer *g_server;
 WiFiClient net;
 PubSubClient client(net);
 bool g_wifiConnected = false;
@@ -31,6 +34,8 @@ bool g_mqttConnected = false;
 unsigned long g_lastWifiConnect = 0;
 
 String g_bssid = "";
+const char *HOMEASSISTANT_STATUS_TOPIC = "homeassistant/status";
+const char *HOMEASSISTANT_STATUS_TOPIC_ALT = "ha/status";
 
 bool connectToWifi()
 {
@@ -59,18 +64,133 @@ bool connectToMqtt()
       return false;
     }
   }
+
+  for (uint8_t i = 0; i < RobotArm::NUM_JOINTS; i++)
+  {
+    client.subscribe(g_mqttView->getJoint(i)->getCommandTopic(), 1);
+  }
+
+  g_mqttView->publishConfig();
+
   return true;
+}
+
+float parseValue(const char *data, unsigned int length)
+{
+  // TODO length check
+  char temp[32];
+  strncpy(temp, data, length);
+  return strtof(temp, NULL);
+}
+
+void callback(char *topic, byte *payload, unsigned int length)
+{
+  log_info("Message arrived [%s]", topic);
+  for (unsigned int i = 0; i < length; i++)
+  {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+  for (uint8_t i = 0; i < RobotArm::NUM_JOINTS; i++)
+  {
+    if (strcmp(topic, g_mqttView->getJoint(i)->getCommandTopic()) == 0)
+    {
+      float data = parseValue((char *)payload, length);
+      g_robotArm->setAngle(i, data);
+      break;
+    }
+  }
+
+  // publish config when homeassistant comes online and needs the configuration again
+  if (strcmp(topic, HOMEASSISTANT_STATUS_TOPIC) == 0 ||
+      strcmp(topic, HOMEASSISTANT_STATUS_TOPIC_ALT) == 0)
+  {
+    if (strncmp((char *)payload, "online", length) == 0)
+    {
+      g_mqttView->publishConfig();
+    }
+  }
 }
 
 void setup()
 {
+  Serial.begin(115200);
+  delay(100);
   // We allocate two timers for PWM Control
   // TODO: check if and why this is needed from the lib
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
-  //ESP32PWM::allocateTimer(2);
-  //ESP32PWM::allocateTimer(3);
+  ESP32PWM::allocateTimer(2);
+  // ESP32PWM::allocateTimer(3);
+
+  delay(400);
+  log_info("Starting to mount LittleFS");
+  if (!LittleFS.begin())
+  {
+    log_error("Failed to mount file system");
+    delay(5000);
+    if (!formatLittleFS())
+    {
+      log_error("Failed to format file system - hardware issues!");
+      for (;;)
+      {
+        delay(100);
+      }
+    }
+  }
+  log_info("Finished Mounting");
+  WiFi.setHostname(composeClientID().c_str());
+  WiFi.mode(WIFI_STA);
+#ifdef ESP32
+  // select the AP with the strongest signal
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+#endif
+
+  // TODO: boot in ap mode if apnextboot is set
+  // WiFi.begin(g_settings.getWiFiSettings().staSsid, g_settings.getWiFiSettings().staPassword);
+  WiFi.begin(DEFAULT_STA_WIFI_SSID, DEFAULT_STA_WIFI_PASS);
+
+  log_info("Connecting to wifi...");
+  // TODO: really forever? What if we want to go back to autoconnect?
+  long startTime = millis();
+  while (!connectToWifi())
+  {
+    if (millis() - startTime > WIFI_CONNECTION_FAIL_TIMEOUT_S * 1000)
+    {
+      // we failed to connect to the wifi, force reboot in AP settings
+      // Settings::GeneralSettings settings = g_settings.getGeneralSettings();
+      // settings.forceAPnextBoot = true;
+      // g_settings.setGeneralSettings(settings);
+      // g_settings.save();
+      ESP.restart();
+    }
+    log_debug(".");
+    delay(500);
+  }
+  g_wifiConnected = true;
+  g_lastWifiConnect = millis();
+
+  log_info("Wifi connected!");
+  log_info("IP address: %s", WiFi.localIP().toString().c_str());
+  g_bssid = WiFi.BSSIDstr();
+
+
   g_robotArm = new RobotArm(SERVO_0_PIN, SERVO_1_PIN, SERVO_2_PIN, SERVO_3_PIN, SERVO_4_PIN, SERVO_5_PIN);
+  g_server = new ApiServer(g_robotArm);
+  g_mqttView = new MqttView(&client, g_robotArm);
+  g_server->begin();
+
+  // MQTT initialization
+  char configUrl[256];
+  snprintf(configUrl, sizeof(configUrl), "http://%s/", WiFi.localIP().toString().c_str());
+  g_mqttView->getDevice().setConfigurationUrl(configUrl);
+
+  client.setBufferSize(1024);
+  client.setServer(MQTT_SERVER, MQTT_PORT);
+  client.setCallback(callback);
+
+  log_info("Boot done");
 }
 
 void loop()
@@ -99,7 +219,7 @@ void loop()
   g_wifiConnected = true;
   g_lastWifiConnect = millis();
 
-  server->handleClient(); // Handling of incoming web requests
+  g_server->handleClient(); // Handling of incoming web requests
   ArduinoOTA.handle();
 
   bool mqttConnected = connectToMqtt();
@@ -159,4 +279,5 @@ void loop()
       break;
     }
   }
+  delay(1);
 }

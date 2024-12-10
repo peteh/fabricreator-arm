@@ -7,6 +7,7 @@
 void ApiServer::begin()
 {
     m_server.begin(80);
+    m_server.enableDelay(false);
 
     // Webpages
     // m_server.on("/", HTTP_GET, std::bind(&ApiServer::handleRoot, this));
@@ -51,7 +52,7 @@ void ApiServer::handleWeb()
 
 void ApiServer::handleJointsPost()
 {
-    /* curl -X POST https://api.example.com/endpoint \
+    /* curl -X POST http://192.168.2.199/api/v1/joints \
     -H "Content-Type: application/json" \
      -d '{"joints": [90, 90, 90, 90, 90, 90, 90, 90]}'
     */
@@ -100,7 +101,9 @@ void ApiServer::handleJointsGet()
         joints.add(m_robotArm->getAngle(i));
     }
     serializeJson(doc, configJson);
+    m_server.client().setNoDelay(true);
     m_server.send(200, "application/json", configJson);
+    //m_server.client().print(configJson);
 }
 
 void ApiServer::handleClient()
