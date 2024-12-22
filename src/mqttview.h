@@ -57,7 +57,7 @@ public:
 
         for (uint8_t i = 0; i < RobotArm::NUM_JOINTS; i++)
         {
-            publishConfig(*m_joints[i]);
+            publishJoint(i, m_robotArm->getAngle(i));
         }
     }
 private:
