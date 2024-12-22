@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joint Control</title>
+    <style>
+        .slider-container {
+            margin: 20px;
+        }
+        .slider-container label {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Joint Control</h1>
+    <div id="sliders">
+        <!-- Sliders will be dynamically generated -->
+    </div>
+    <script>
+        // Fetch initial slider positions
+        async function fetchJointPositions() {
+            try {
+                const response = await fetch('/api/v1/joints');
+                if (!response.ok) throw new Error(`Error: ${response.statusText}`);
+                const data = await response.json();
+                initializeSliders(data.joints);
+            } catch (error) {
+                console.error('Failed to fetch joint positions:', error);
+            }
+        }
+
+        // Initialize sliders with fetched positions
+        function initializeSliders(joints) {
+            const sliderContainer = document.getElementById('sliders');
+            sliderContainer.innerHTML = ''; // Clear existing sliders
+
+            joints.forEach((angle, index) => {
+                const sliderWrapper = document.createElement('div');
+                sliderWrapper.className = 'slider-container';
+
+                const label = document.createElement('label');
+                label.innerText = `Joint ${index + 1}: ${angle}°`;
+                label.setAttribute('for', `slider${index}`);
+
+                const slider = document.createElement('input');
+                slider.type = 'range';
+                slider.id = `slider${index}`;
+                slider.min = '0';
+                slider.max = '180';
+                slider.value = angle;
+                slider.addEventListener('input', (e) => {
+                    label.innerText = `Joint ${index + 1}: ${e.target.value}°`;
+                    sendJointPositions();
+                });
+
+                sliderWrapper.appendChild(label);
+                sliderWrapper.appendChild(slider);
+                sliderContainer.appendChild(sliderWrapper);
+            });
+        }
+
+        // Send updated joint positions
+        async function sendJointPositions() {
+            const sliders = document.querySelectorAll('input[type="range"]');
+            const joints = Array.from(sliders).map(slider => parseInt(slider.value, 10));
+
+            try {
+                const response = await fetch('/api/v1/joints', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ joints }),
+                });
+                if (!response.ok) throw new Error(`Error: ${response.statusText}`);
+                console.log('Joint positions updated successfully');
+            } catch (error) {
+                console.error('Failed to send joint positions:', error);
+            }
+        }
+
+        // Initialize page
+        fetchJointPositions();
+    </script>
+</body>
+</html>
