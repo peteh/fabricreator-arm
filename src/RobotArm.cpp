@@ -18,23 +18,32 @@ RobotArm::RobotArm(uint8_t servo0Pin, uint8_t servo1Pin, uint8_t servo2Pin, uint
     }
 }
 
-void RobotArm::setAngle(uint8_t joint, uint8_t value)
+float RobotArm::mapRange(float input, float inMin, float inMax, float outMin, float outMax) {
+    return outMin + (input - inMin) * (outMax - outMin) / (inMax - inMin);
+}
+
+void RobotArm::setAngle(uint8_t joint, float value)
 {
     if (joint >= NUM_JOINTS)
     {
         // TODO: Consider adding error logging or throwing an exception
         return;
     }
-    if (value > 180)
+    if (value > 180.)
     {
         // Clamp to valid range instead of silently failing
-        value = 180;
+        value = 180.;
     }
     m_servoPos[joint] = value;
-    m_servos[joint].write(value);
+
+    // instead of using .write() we map manually to microseconds as this gives 
+    // a bit higher accuracy by having a higher resolution
+    int command = this->mapRange(value, 0, 180, DEFAULT_uS_LOW, DEFAULT_uS_HIGH);
+    m_servos[joint].writeMicroseconds(command);
+    
 }
 
-uint8_t RobotArm::getAngle(uint8_t joint) const
+float RobotArm::getAngle(uint8_t joint) const
 {
     if (joint < NUM_JOINTS)
     {
@@ -43,9 +52,8 @@ uint8_t RobotArm::getAngle(uint8_t joint) const
     return 0; // Return 0 for invalid joint index
 }
 
-void RobotArm::moveTo(const uint8_t targetAngles[NUM_JOINTS])
+void RobotArm::moveTo(const float targetAngles[NUM_JOINTS])
 {
-    uint8_t currentAngles[NUM_JOINTS];
     float stepIncrements[NUM_JOINTS];
     uint16_t maxSteps = 0;
     long stepDelayMs = 20;
@@ -53,8 +61,7 @@ void RobotArm::moveTo(const uint8_t targetAngles[NUM_JOINTS])
     // Get current angles and determine the maximum number of steps
     for (uint8_t i = 0; i < NUM_JOINTS; i++)
     {
-        currentAngles[i] = getAngle(i);
-        float secondsForThisJoint = (float)abs(targetAngles[i] - currentAngles[i]) / (float)m_maxVelocitiesDegPers[i];
+        float secondsForThisJoint = (float)abs(targetAngles[i] - m_servoPos[i]) / m_maxVelocitiesDegPers[i];
         uint16_t stepsForThisJoint = secondsForThisJoint * 1000 / stepDelayMs;
         maxSteps = max(maxSteps, stepsForThisJoint);
     }
@@ -68,8 +75,8 @@ void RobotArm::moveTo(const uint8_t targetAngles[NUM_JOINTS])
     // Calculate step increments for each joint
     for (uint8_t i = 0; i < NUM_JOINTS; i++)
     {
-        int16_t totalMovement = targetAngles[i] - currentAngles[i];
-        stepIncrements[i] = (float)totalMovement / maxSteps; // Movement per step
+        float totalMovement = targetAngles[i] - m_servoPos[i];
+        stepIncrements[i] = totalMovement / maxSteps; // Movement per step
     }
 
     // Move all joints simultaneously
@@ -79,8 +86,7 @@ void RobotArm::moveTo(const uint8_t targetAngles[NUM_JOINTS])
 
         for (uint8_t i = 0; i < NUM_JOINTS; i++)
         {
-            float targetStepAngle = currentAngles[i] + step * stepIncrements[i];
-            uint8_t nextAngle = (uint8_t)round(targetStepAngle);
+            float nextAngle = m_servoPos[i] + step * stepIncrements[i];
 
             if (nextAngle != targetAngles[i])
             {
