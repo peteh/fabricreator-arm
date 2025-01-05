@@ -14,6 +14,8 @@
 #include "config.h"
 #include "mqttview.h"
 #include "utils.h"
+#include "Motion.h"
+#include "led_rgb.h"
 
 const uint8_t SERVO_0_PIN = 2;  // base
 const uint8_t SERVO_1_PIN = 3;  // lower arm low gear
@@ -21,6 +23,7 @@ const uint8_t SERVO_2_PIN = 4;  // lower arm upper gear
 const uint8_t SERVO_3_PIN = 5;  // claw turn
 const uint8_t SERVO_4_PIN = 16; // claw pitch
 const uint8_t SERVO_5_PIN = 17; // claw
+
 
 const uint WIFI_DISCONNECT_FORCED_RESTART_S = 60;
 
@@ -36,6 +39,12 @@ unsigned long g_lastWifiConnect = 0;
 String g_bssid = "";
 const char *HOMEASSISTANT_STATUS_TOPIC = "homeassistant/status";
 const char *HOMEASSISTANT_STATUS_TOPIC_ALT = "ha/status";
+
+Motion *g_motion = nullptr;
+uint8_t g_motionNum = 0;
+
+LedRGB *g_led = new LedRGB(RGB_LED_PIN);
+
 
 bool connectToWifi()
 {
@@ -124,6 +133,7 @@ void setup()
   // ESP32PWM::allocateTimer(3);
 
   delay(400);
+  Serial.print("Booting....");
   log_info("Starting to mount LittleFS");
   if (!LittleFS.begin())
   {
@@ -147,6 +157,10 @@ void setup()
   WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
 #endif
 
+  g_led->begin();
+  g_led->setBackgroundLight(true);
+  g_led->update();
+
   // TODO: boot in ap mode if apnextboot is set
   // WiFi.begin(g_settings.getWiFiSettings().staSsid, g_settings.getWiFiSettings().staPassword);
   WiFi.begin(DEFAULT_STA_WIFI_SSID, DEFAULT_STA_WIFI_PASS);
@@ -169,17 +183,18 @@ void setup()
     delay(500);
   }
   g_wifiConnected = true;
+  g_led->setBackgroundLight(false);
   g_lastWifiConnect = millis();
 
   log_info("Wifi connected!");
   log_info("IP address: %s", WiFi.localIP().toString().c_str());
   g_bssid = WiFi.BSSIDstr();
 
-
   g_robotArm = new RobotArm(SERVO_0_PIN, SERVO_1_PIN, SERVO_2_PIN, SERVO_3_PIN, SERVO_4_PIN, SERVO_5_PIN);
   g_server = new ApiServer(g_robotArm);
   g_mqttView = new MqttView(&client, g_robotArm);
   g_server->begin();
+  g_led->update();
 
   // MQTT initialization
   char configUrl[256];
@@ -195,6 +210,7 @@ void setup()
 
 void loop()
 {
+  g_led->update();
   bool wifiConnected = connectToWifi();
   if (!wifiConnected)
   {
@@ -246,38 +262,46 @@ void loop()
   g_mqttConnected = true;
 
   client.loop();
+  
 
-  if (Serial.available() > 0) // When data is available to read
+
+  if (g_motion == nullptr || g_motion->isFinished())
   {
-    String input = Serial.readStringUntil('\n');    // Read a full line
-    int servoIndex = input.substring(0, 1).toInt(); // Read the servo index
-    int servoValue = input.substring(2).toInt();    // Read servo value
-
-    switch (servoIndex)
+    // Clean up previous motion if it exists
+    if (g_motion != nullptr)
     {
-    case 1:
-      g_robotArm->setAngle(0, servoValue);
-      break;
-    case 2:
-      g_robotArm->setAngle(1, servoValue);
-      break;
-    case 3:
-      g_robotArm->setAngle(2, servoValue);
-      break;
-    case 4:
-      g_robotArm->setAngle(3, servoValue);
-      break;
-    case 5:
-      g_robotArm->setAngle(4, servoValue);
-      g_robotArm->setAngle(6, 180 - servoValue);
-      break;
-    case 6:
-      g_robotArm->setAngle(5, servoValue);
-      break;
-    default:
-      // Índice de servo inválido
-      break;
+      delete g_motion;
+      g_motion = nullptr;
+    }
+    if (g_motionNum == 0)
+    {
+      float params[] = {180.f, 180.f, 180.f, 180.f, 180.f, 180.f};
+
+      g_motion = new Motion(g_robotArm, params);
+    }
+    else if (g_motionNum == 1)
+    {
+      float params[] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+      g_motion = new Motion(g_robotArm, params);
+    }
+    else if (g_motionNum == 2)
+    {
+      float params[] = {90.f, 90.f, 90.f, 90.f, 90.f, 90.f};
+      g_motion = new Motion(g_robotArm, params);
+    }
+
+    g_motionNum++;
+    if (g_motionNum > 2)
+    {
+      g_motion = 0;
     }
   }
-  delay(1);
+  // Only execute if motion exists
+  if (g_motion != nullptr)
+  {
+    long start = millis();
+    //g_motion->execute();
+    long time = millis()-start;
+    log_e("Everything else time: %d", time);
+  }
 }

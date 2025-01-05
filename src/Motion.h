@@ -4,12 +4,13 @@
 class Motion
 {
 private:
-    bool m_active = false;
-    bool m_initialized = false;
+    bool m_active;
+    bool m_initialized;
+    bool m_finished;
     float m_motionStartAngles[RobotArm::NUM_JOINTS];
     float m_motionTargetAngles[RobotArm::NUM_JOINTS];
-    long m_motionStartTime = 0;
-    long m_motionPlannedTime = 0;
+    unsigned long m_motionStartTime = 0l;
+    unsigned long m_motionPlannedTime = 0l;
     RobotArm* m_robotArm;
 
     void initialize();
@@ -17,4 +18,5 @@ private:
 public:
     Motion(RobotArm *robotArm, const float targetAngles[RobotArm::NUM_JOINTS]);
     bool execute();
+    bool isFinished();
 };

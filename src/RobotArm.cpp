@@ -30,10 +30,10 @@ void RobotArm::setAngle(uint8_t joint, float value)
         // TODO: Consider adding error logging or throwing an exception
         return;
     }
-    if (value > 180.)
+    if (value > 180.f)
     {
         // Clamp to valid range instead of silently failing
-        value = 180.;
+        value = 180.f;
     }
     m_servoPosDeg[joint] = value;
 
@@ -41,6 +41,7 @@ void RobotArm::setAngle(uint8_t joint, float value)
     // a bit higher accuracy by having a higher resolution
     int command = this->mapRange(value, 0, 180, DEFAULT_uS_LOW, DEFAULT_uS_HIGH);
     m_servos[joint].writeMicroseconds(command);
+    //m_servos[joint].write((int)value);
 }
 
 float RobotArm::getAngle(uint8_t joint) const
