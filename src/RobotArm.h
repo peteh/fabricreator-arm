@@ -9,6 +9,7 @@ public:
 
   void setAngle(uint8_t joint, float value);
   float getAngle(uint8_t joint) const;
+  float getMaxVelocity(uint8_t joint) const;
 
   void moveTo(const float targetAngles[NUM_JOINTS]);
 
@@ -17,9 +18,12 @@ private:
   uint8_t m_servoPins[NUM_JOINTS];
 
   Servo m_servos[NUM_JOINTS];
-  float m_servoPos[NUM_JOINTS];
+  float m_servoPosDeg[NUM_JOINTS];
 
   // max velocities in degrees/second
   float m_maxVelocitiesDegPers[NUM_JOINTS];
-  float RobotArm::mapRange(float input, float inMin, float inMax, float outMin, float outMax);
+  float mapRange(float input, float inMin, float inMax, float outMin, float outMax);
+
+  //void initMotion(const float targetAngles[NUM_JOINTS]);
+  //bool moveMotionStep();
 };
