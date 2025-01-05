@@ -21,5 +21,5 @@ private:
 
   // max velocities in degrees/second
   float m_maxVelocitiesDegPers[NUM_JOINTS];
-  float RobotArm::mapRange(float input, float inMin, float inMax, float outMin, float outMax);
+  float mapRange(float input, float inMin, float inMax, float outMin, float outMax);
 };
