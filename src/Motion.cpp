@@ -1,4 +1,3 @@
-#include <esplog.h>
 #include "Motion.h"
 
 Motion::Motion(RobotArm *robotArm, const float targetAngles[RobotArm::NUM_JOINTS])
@@ -72,7 +71,7 @@ bool Motion::execute()
             m_robotArm->setAngle(i, newAngle);
             if (i == 1)
             {
-                log_e("Current angle: %f", newAngle);
+                log_e("Current angle: %f, new Angle %f", m_robotArm->getAngle(i),  newAngle);
             }
         }
     }

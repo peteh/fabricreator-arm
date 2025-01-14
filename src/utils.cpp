@@ -1,6 +1,5 @@
 #include "utils.h"
 #include <LittleFS.h>
-#include <esplog.h>
 String composeClientID()
 {
     uint8_t mac[6];
@@ -18,9 +17,9 @@ String composeClientID()
 
 bool formatLittleFS()
 {
-    log_warn("need to format LittleFS: ");
+    log_w("need to format LittleFS: ");
     LittleFS.end();
     LittleFS.begin();
-    log_info("Success: %d", LittleFS.format());
+    log_i("Success: %d", LittleFS.format());
     return LittleFS.begin();
 }

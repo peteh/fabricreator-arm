@@ -1,3 +1,6 @@
+#include <esp32-hal-ledc.h>
+#include <driver/ledc.h>
+#include <Arduino.h>
 #include "RobotArm.h"
 RobotArm::RobotArm(uint8_t servo0Pin, uint8_t servo1Pin, uint8_t servo2Pin, uint8_t servo3Pin, uint8_t servo4Pin, uint8_t servo5Pin)
 {
@@ -11,37 +14,50 @@ RobotArm::RobotArm(uint8_t servo0Pin, uint8_t servo1Pin, uint8_t servo2Pin, uint
     for (uint8_t i = 0; i < NUM_JOINTS; i++)
     {
         m_servoPosDeg[i] = 90;
-        m_servos[i] = Servo();
-        m_servos[i].attach(m_servoPins[i]);
         m_maxVelocitiesDegPers[i] = 10;
+    }
+}
+
+void RobotArm::begin()
+{
+    // Initialize fade service
+    ledc_fade_func_install(0);
+
+    // Configure LEDC timer
+    for (int i = 0; i < NUM_JOINTS; i++)
+    {
+        ledcSetup(CHANNEL_OFFSET + i, LEDC_BASE_FREQ, LEDC_TIMER_BIT);
+        ledcAttachPin(m_servoPins[i], CHANNEL_OFFSET + i);
+    }
+    for (uint8_t i = 0; i < NUM_JOINTS; i++)
+    {
         setAngle(i, m_servoPosDeg[i]);
     }
 }
 
-float RobotArm::mapRange(float input, float inMin, float inMax, float outMin, float outMax)
+// Convert degrees to timer ticks
+uint32_t RobotArm::degreesToTicks(float degrees)
 {
-    return outMin + (input - inMin) * (outMax - outMin) / (inMax - inMin);
+    degrees = constrain(degrees, 0.0, 180.0);
+    float us = map(degrees * 100, 0, 18000, 1000 * 100, 2000 * 100) / 100.0;
+    return map(us, 0, 20000, 0, TIMER_MAX);
 }
 
-void RobotArm::setAngle(uint8_t joint, float value)
+void RobotArm::setAngle(uint8_t joint, float degrees)
 {
     if (joint >= NUM_JOINTS)
     {
         // TODO: Consider adding error logging or throwing an exception
         return;
     }
-    if (value > 180.f)
-    {
-        // Clamp to valid range instead of silently failing
-        value = 180.f;
-    }
-    m_servoPosDeg[joint] = value;
 
-    // instead of using .write() we map manually to microseconds as this gives
-    // a bit higher accuracy by having a higher resolution
-    int command = this->mapRange(value, 0, 180, DEFAULT_uS_LOW, DEFAULT_uS_HIGH);
-    m_servos[joint].writeMicroseconds(command);
-    //m_servos[joint].write((int)value);
+    // TODO: clamping
+    m_servoPosDeg[joint] = degrees;
+    uint32_t targetTicks = degreesToTicks(degrees);
+    uint32_t fadeTimeMs = 20;
+    // ledcWrite(LEDC_CHANNEL, targetTicks);
+    ledc_set_fade_time_and_start(ledc_mode_t::LEDC_LOW_SPEED_MODE, (ledc_channel_t)(CHANNEL_OFFSET + joint),
+                                 targetTicks, fadeTimeMs, ledc_fade_mode_t::LEDC_FADE_NO_WAIT);
 }
 
 float RobotArm::getAngle(uint8_t joint) const
@@ -61,132 +77,3 @@ float RobotArm::getMaxVelocity(uint8_t joint) const
     }
     return 0; // Return 0 for invalid joint index
 }
-
-/*
-void RobotArm::initMotion(const float targetAngles[NUM_JOINTS])
-{
-    long stepDelayMs = 20;
-    m_motionSteps = 0;
-    m_motionCurrentStep = 0;
-
-    // Get current angles and determine the maximum number of steps
-    for (uint8_t i = 0; i < NUM_JOINTS; i++)
-    {
-        m_motionStartAngles[i] = m_servoPosDeg[i];
-        m_motionTargetAngles[i] = targetAngles[i];
-        float secondsForThisJoint = (float)abs(m_motionTargetAngles[i] - m_servoPosDeg[i]) / m_maxVelocitiesDegPers[i];
-        uint16_t stepsForThisJoint = secondsForThisJoint * 1000 / stepDelayMs;
-        m_motionSteps = max(m_motionSteps, stepsForThisJoint);
-    }
-
-    if (m_motionSteps == 0)
-    {
-        // all joints already in position
-        m_motionActive = 0;
-        return;
-    }
-
-    // Calculate step increments for each joint
-    for (uint8_t i = 0; i < NUM_JOINTS; i++)
-    {
-        float totalMovement = targetAngles[i] - m_servoPosDeg[i];
-        m_motionStepIncrements[i] = totalMovement / m_motionSteps; // Movement per step
-    }
-    m_motionActive = true;
-}
-bool RobotArm::moveMotionStep()
-{
-    // Move all joints simultaneously
-    if (m_motionCurrentStep < m_motionSteps)
-    {
-        bool allReached = true;
-
-        for (uint8_t i = 0; i < NUM_JOINTS; i++)
-        {
-            float nextAngle = m_servoPosDeg[i] + m_motionCurrentStep * m_motionStepIncrements[i];
-
-            if (nextAngle != m_motionTargetAngles[i])
-            {
-                allReached = false;
-                this->setAngle(i, nextAngle);
-            }
-        }
-
-        if (allReached)
-        {
-            // TODO: can this really happen?
-            // break; // Exit early if all joints have reached their targets
-            // TODO: FIX
-        }
-        m_motionCurrentStep++;
-    }
-    else if (m_motionCurrentStep == m_motionSteps)
-    {
-        // Ensure all joints reach their final positions
-        for (uint8_t i = 0; i < NUM_JOINTS; i++)
-        {
-            this->setAngle(i, m_motionTargetAngles[i]);
-        }
-        m_motionActive = false;
-    }
-}
-
-void RobotArm::moveTo(const float targetAngles[NUM_JOINTS])
-{
-    float stepIncrements[NUM_JOINTS];
-    uint16_t maxSteps = 0;
-    long stepDelayMs = 20;
-
-    // Get current angles and determine the maximum number of steps
-    for (uint8_t i = 0; i < NUM_JOINTS; i++)
-    {
-        float secondsForThisJoint = (float)abs(targetAngles[i] - m_servoPosDeg[i]) / m_maxVelocitiesDegPers[i];
-        uint16_t stepsForThisJoint = secondsForThisJoint * 1000 / stepDelayMs;
-        maxSteps = max(maxSteps, stepsForThisJoint);
-    }
-
-    if (maxSteps == 0)
-    {
-        // all joints already in position
-        return;
-    }
-
-    // Calculate step increments for each joint
-    for (uint8_t i = 0; i < NUM_JOINTS; i++)
-    {
-        float totalMovement = targetAngles[i] - m_servoPosDeg[i];
-        stepIncrements[i] = totalMovement / maxSteps; // Movement per step
-    }
-
-    // Move all joints simultaneously
-    for (uint16_t step = 0; step <= maxSteps; step++)
-    {
-        bool allReached = true;
-
-        for (uint8_t i = 0; i < NUM_JOINTS; i++)
-        {
-            float nextAngle = m_servoPosDeg[i] + step * stepIncrements[i];
-
-            if (nextAngle != targetAngles[i])
-            {
-                allReached = false;
-                this->setAngle(i, nextAngle);
-            }
-        }
-
-        if (allReached)
-        {
-            // TODO: can this really happen?
-            break; // Exit early if all joints have reached their targets
-        }
-
-        delay(stepDelayMs); // Control movement timing
-    }
-
-    // Ensure all joints reach their final positions
-    for (uint8_t i = 0; i < NUM_JOINTS; i++)
-    {
-        this->setAngle(i, targetAngles[i]);
-    }
-}
-*/

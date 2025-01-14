@@ -1,5 +1,4 @@
 #include <uri/UriBraces.h>
-#include <esplog.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include "apiserver.h"

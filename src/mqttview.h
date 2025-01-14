@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include <MqttDevice.h>
-#include <esplog.h>
 #include "platform.h"
 #include "utils.h"
 #include "RobotArm.h"
@@ -74,12 +73,12 @@ private:
         entity.getHomeAssistantConfigTopic(topic, sizeof(topic));
         if (!m_client->publish(topic, payload.c_str()))
         {
-            log_error("Failed to publish config to %s", entity.getStateTopic());
+            log_e("Failed to publish config to %s", entity.getStateTopic());
         }
         entity.getHomeAssistantConfigTopicAlt(topic, sizeof(topic));
         if (!m_client->publish(topic, payload.c_str()))
         {
-            log_error("Failed to publish config to %s", entity.getStateTopic());
+            log_e("Failed to publish config to %s", entity.getStateTopic());
         }
     }
 
@@ -87,7 +86,7 @@ private:
     {
         if (!m_client->publish(entity.getStateTopic(), state))
         {
-            log_error("Failed to publish state to %s", entity.getStateTopic());
+            log_e("Failed to publish state to %s", entity.getStateTopic());
         }
     }
 };

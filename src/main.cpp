@@ -3,7 +3,6 @@
 #include <mdns.h>
 #include <ArduinoOTA.h>
 #include <LittleFS.h>
-#include <esplog.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 // watch dog
@@ -43,7 +42,7 @@ const char *HOMEASSISTANT_STATUS_TOPIC_ALT = "ha/status";
 Motion *g_motion = nullptr;
 uint8_t g_motionNum = 0;
 
-LedRGB *g_led = new LedRGB(RGB_LED_PIN);
+//LedRGB *g_led = new LedRGB(RGB_LED_PIN);
 
 
 bool connectToWifi()
@@ -58,7 +57,7 @@ bool connectToMqtt()
     return true;
   }
 
-  log_info("Connecting to MQTT...");
+  log_i("Connecting to MQTT...");
   if (strlen(MQTT_USER) == 0)
   {
     if (!client.connect(composeClientID().c_str()))
@@ -94,7 +93,7 @@ float parseValue(const char *data, unsigned int length)
 
 void callback(char *topic, byte *payload, unsigned int length)
 {
-  log_info("Message arrived [%s]", topic);
+  log_i("Message arrived [%s]", topic);
   for (unsigned int i = 0; i < length; i++)
   {
     Serial.print((char)payload[i]);
@@ -127,28 +126,24 @@ void setup()
   delay(100);
   // We allocate two timers for PWM Control
   // TODO: check if and why this is needed from the lib
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  // ESP32PWM::allocateTimer(3);
 
   delay(400);
-  Serial.print("Booting....");
-  log_info("Starting to mount LittleFS");
+  log_i("Booting....");
+  log_i("Starting to mount LittleFS");
   if (!LittleFS.begin())
   {
-    log_error("Failed to mount file system");
+    log_e("Failed to mount file system");
     delay(5000);
     if (!formatLittleFS())
     {
-      log_error("Failed to format file system - hardware issues!");
+      log_e("Failed to format file system - hardware issues!");
       for (;;)
       {
         delay(100);
       }
     }
   }
-  log_info("Finished Mounting");
+  log_i("Finished Mounting");
   WiFi.setHostname(composeClientID().c_str());
   WiFi.mode(WIFI_STA);
 #ifdef ESP32
@@ -157,15 +152,17 @@ void setup()
   WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
 #endif
 
-  g_led->begin();
-  g_led->setBackgroundLight(true);
-  g_led->update();
+  //g_led->begin();
+  //g_led->setBackgroundLight(true);
+  //g_led->update();
+
+  
 
   // TODO: boot in ap mode if apnextboot is set
   // WiFi.begin(g_settings.getWiFiSettings().staSsid, g_settings.getWiFiSettings().staPassword);
   WiFi.begin(DEFAULT_STA_WIFI_SSID, DEFAULT_STA_WIFI_PASS);
 
-  log_info("Connecting to wifi...");
+  log_i("Connecting to wifi...");
   // TODO: really forever? What if we want to go back to autoconnect?
   long startTime = millis();
   while (!connectToWifi())
@@ -179,22 +176,23 @@ void setup()
       // g_settings.save();
       ESP.restart();
     }
-    log_debug(".");
+    log_d(".");
     delay(500);
   }
   g_wifiConnected = true;
-  g_led->setBackgroundLight(false);
+  //g_led->setBackgroundLight(false);
   g_lastWifiConnect = millis();
 
-  log_info("Wifi connected!");
-  log_info("IP address: %s", WiFi.localIP().toString().c_str());
+  log_i("Wifi connected!");
+  log_i("IP address: %s", WiFi.localIP().toString().c_str());
   g_bssid = WiFi.BSSIDstr();
 
   g_robotArm = new RobotArm(SERVO_0_PIN, SERVO_1_PIN, SERVO_2_PIN, SERVO_3_PIN, SERVO_4_PIN, SERVO_5_PIN);
+  g_robotArm->begin();
   g_server = new ApiServer(g_robotArm);
   g_mqttView = new MqttView(&client, g_robotArm);
   g_server->begin();
-  g_led->update();
+  //g_led->update();
 
   // MQTT initialization
   char configUrl[256];
@@ -205,12 +203,12 @@ void setup()
   client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(callback);
 
-  log_info("Boot done");
+  log_i("Boot done");
 }
 
 void loop()
 {
-  g_led->update();
+  //g_led->update();
   bool wifiConnected = connectToWifi();
   if (!wifiConnected)
   {
@@ -224,7 +222,7 @@ void loop()
     }
     if (millis() - g_lastWifiConnect > WIFI_DISCONNECT_FORCED_RESTART_S * 1000)
     {
-      log_warn("Wifi could not connect in time, will force a restart");
+      log_w("Wifi could not connect in time, will force a restart");
       ESP.restart();
     }
     g_wifiConnected = false;
@@ -264,13 +262,12 @@ void loop()
   client.loop();
   
 
-
   if (g_motion == nullptr || g_motion->isFinished())
   {
     // Clean up previous motion if it exists
     if (g_motion != nullptr)
     {
-      delete g_motion;
+      //delete g_motion;
       g_motion = nullptr;
     }
     if (g_motionNum == 0)
@@ -300,8 +297,9 @@ void loop()
   if (g_motion != nullptr)
   {
     long start = millis();
-    //g_motion->execute();
+    g_motion->execute();
     long time = millis()-start;
     log_e("Everything else time: %d", time);
   }
+  delay(20);
 }
